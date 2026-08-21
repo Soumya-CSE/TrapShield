@@ -1,2 +1,35 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #F6F3EC;
+  --paper: #FBF9F4;
+  --ink: #1A1815;
+  --muted: #7A7468;
+  --faint: #A79F8E;
+  --line: #D8D2C2;
+  --accent: #C4491F;
+  --accent-bg: #F1DCCF;
+  --gold: #8C6A2A;
+  --gold-bg: #EFE4CC;
+}
+
+body {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle at 50% 0%, rgba(196, 73, 31, 0.03), transparent 40%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.font-display {
+  font-family: "Fraunces", serif;
+}
+.font-mono {
+  font-family: "JetBrains Mono", monospace;
+}
