@@ -11,14 +11,46 @@ app.use(express.json({ limit: "1mb" }));
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ---- existing analyze route (unchanged) -----------------------------------
+const GUIDANCE = {
+  isolation:
+    "Someone asking you to keep them secret from your parents or friends is a warning sign on its own — healthy relationships don't need to be hidden.",
+  secrecy:
+    "Being asked to delete messages or hide a conversation is a tactic to remove evidence. Consider saving screenshots somewhere the other person can't access.",
+  loveBombing:
+    "Very fast, very intense affection can feel amazing, but it's also a known tactic to build trust quickly before asking for something. It's okay to slow down.",
+  offPlatform:
+    "Being pushed to move to a different app is often done to avoid safety features and reporting tools on the original platform. You don't have to switch.",
+  photoRequest:
+    "No one you haven't met and trust in person needs photos of you, especially private ones. It's okay to say no, even if you've sent things before.",
+  financial:
+    "Requests for money or gift cards from someone you met online are a major red flag for scams, regardless of the story behind them.",
+  threatCoercion:
+    "Threats to share private content are a form of coercion. This is illegal in many places, and you will not be in trouble for reporting it or asking for help.",
+  urgencyPressure:
+    "Pressure to respond immediately or guilt for not responding is designed to stop you from thinking it through. A person who respects you will give you space.",
+  meetOffline:
+    "Meeting someone from online in person, especially without telling a trusted adult, carries real risk. If you do meet, it should be public, and someone should know.",
+};
+
+function buildGuidance(result) {
+  const cats = Object.keys(result.categoryTally || {});
+  const tips = cats.map((c) => GUIDANCE[c]).filter(Boolean);
+  if (tips.length === 0) {
+    return [
+      "Nothing in this conversation matched known manipulation patterns. Trust your instincts anyway — if something feels off, it's okay to step back or talk to someone you trust.",
+    ];
+  }
+  return tips;
+}
+
 app.post("/api/analyze", (req, res) => {
   const { messages } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "Send a non-empty messages array" });
   }
   const result = analyzeConversation(messages);
-  res.json(result);
+  const guidance = buildGuidance(result);
+  res.json({ ...result, guidance });
 });
 
 // ---- new chat route ---------------------------------------------------
