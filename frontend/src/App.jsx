@@ -11,9 +11,9 @@ export default function App() {
         <header className="flex justify-between items-end pb-4 mb-1.5" style={{ borderBottom: "3px solid var(--ink)" }}>
           <h1 className="font-display font-semibold text-[34px] tracking-tight m-0">TrapShield</h1>
           <div className="font-mono text-[10.5px] text-right leading-relaxed" style={{ color: "var(--muted)" }}>
-            CASE FILE
+            Don't wait until it's too late - read the shape of
             <br />
-            REF #0192 · FILED TODAY
+            a conversation, not just one message
           </div>
         </header>
         <div className="mb-7" style={{ borderBottom: "1px solid var(--ink)" }} />
