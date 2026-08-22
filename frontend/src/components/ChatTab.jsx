@@ -51,6 +51,24 @@ export default function ChatTab() {
     }
   }
 
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: apiMessages }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+      const data = await res.json();
+      setMessages([...nextMessages, { role: "assistant", content: data.reply }]);
+    } catch (e) {
+      setError(e.message || "Couldn't reach the Guide right now.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="p-6" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
       <div className="flex gap-3.5 items-start mb-5 pb-4.5" style={{ borderBottom: "1px solid var(--line)" }}>
