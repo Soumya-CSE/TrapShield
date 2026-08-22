@@ -1,66 +1,59 @@
 import express from "express";
 import cors from "cors";
+import "dotenv/config";
+import Anthropic from "@anthropic-ai/sdk";
 import { analyzeConversation } from "./detectionEngine.js";
+import { SYSTEM_PROMPT } from "./chatPrompt.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ---- Safety guidance, keyed by which categories fired ---------------------
-const GUIDANCE = {
-  isolation:
-    "Someone asking you to keep them secret from your parents or friends is a warning sign on its own — healthy relationships don't need to be hidden.",
-  secrecy:
-    "Being asked to delete messages or hide a conversation is a tactic to remove evidence. Consider saving screenshots somewhere the other person can't access.",
-  loveBombing:
-    "Very fast, very intense affection can feel amazing, but it's also a known tactic to build trust quickly before asking for something. It's okay to slow down.",
-  offPlatform:
-    "Being pushed to move to a different app is often done to avoid safety features and reporting tools on the original platform. You don't have to switch.",
-  photoRequest:
-    "No one you haven't met and trust in person needs photos of you, especially private ones. It's okay to say no, even if you've sent things before.",
-  financial:
-    "Requests for money or gift cards from someone you met online are a major red flag for scams, regardless of the story behind them.",
-  threatCoercion:
-    "Threats to share private content are a form of coercion. This is illegal in many places, and you will not be in trouble for reporting it or asking for help.",
-  urgencyPressure:
-    "Pressure to respond immediately or guilt for not responding is designed to stop you from thinking it through. A person who respects you will give you space.",
-  meetOffline:
-    "Meeting someone from online in person, especially without telling a trusted adult, carries real risk. If you do meet, it should be public, and someone should know.",
-};
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-function buildGuidance(result) {
-  const cats = Object.keys(result.categoryTally);
-  const tips = cats.map((c) => GUIDANCE[c]).filter(Boolean);
-  if (tips.length === 0) {
-    return [
-      "Nothing in this conversation matched known manipulation patterns. Trust your instincts anyway — if something feels off, it's okay to step back or talk to someone you trust.",
-    ];
-  }
-  return tips;
-}
-
+// ---- existing analyze route (unchanged) -----------------------------------
 app.post("/api/analyze", (req, res) => {
   const { messages } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: "Provide a non-empty 'messages' array of { sender, text }." });
+    return res.status(400).json({ error: "Send a non-empty messages array" });
   }
-  const cleaned = messages
-    .filter((m) => m && typeof m.text === "string" && m.text.trim().length > 0)
-    .map((m) => ({ sender: String(m.sender || "unknown"), text: m.text.trim() }));
+  const result = analyzeConversation(messages);
+  res.json(result);
+});
 
-  if (cleaned.length === 0) {
-    return res.status(400).json({ error: "No valid messages after cleaning." });
+// ---- new chat route ---------------------------------------------------
+app.post("/api/chat", async (req, res) => {
+  const { messages } = req.body || {};
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: "Send a non-empty messages array" });
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: "Server is missing ANTHROPIC_API_KEY — check backend/.env" });
   }
 
-  const result = analyzeConversation(cleaned);
-  const guidance = buildGuidance(result);
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 300,
+      system: SYSTEM_PROMPT,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    });
 
-  res.json({ ...result, guidance });
+    const reply = response.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+
+    res.json({ reply });
+  } catch (err) {
+    console.error("Chat error:", err.message);
+    res.status(500).json({ error: "Something went wrong reaching the Guide." });
+  }
 });
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`TrapShield backend running on http://localhost:${PORT}`);
+  console.log(`Backend running on http://localhost:${PORT}`);
 });
