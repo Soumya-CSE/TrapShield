@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import Anthropic from "@anthropic-ai/sdk";
+import {GoogleGenAI} from "@google/genai";
 import { analyzeConversation } from "./detectionEngine.js";
 import { SYSTEM_PROMPT } from "./chatPrompt.js";
 
@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const GUIDANCE = {
   isolation:
@@ -59,24 +59,24 @@ app.post("/api/chat", async (req, res) => {
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "Send a non-empty messages array" });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: "Server is missing ANTHROPIC_API_KEY — check backend/.env" });
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({ error: "Server is missing GEMINI_API_KEY — check backend/.env" });
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 300,
-      system: SYSTEM_PROMPT,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    // Gemini uses "model"/"user" roles instead of "assistant"/"user"
+    const contents = messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+
+    const response = await genAI.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents,
+      config: { systemInstruction: SYSTEM_PROMPT },
     });
 
-    const reply = response.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("\n");
-
-    res.json({ reply });
+    res.json({ reply: response.text });
   } catch (err) {
     console.error("Chat error:", err.message);
     res.status(500).json({ error: "Something went wrong reaching the Guide." });
