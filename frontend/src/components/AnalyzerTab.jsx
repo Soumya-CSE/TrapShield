@@ -37,7 +37,16 @@ const RISK_LABEL = {
   low: "Low risk",
   elevated: "Elevated risk",
   high: "High risk",
-  critical: "Critical",
+  critical: "Critical risk",
+};
+
+// which accent color family a risk level maps to
+const RISK_COLOR = {
+  none: { text: "var(--muted)", bg: "var(--line)" },
+  low: { text: "var(--sage)", bg: "var(--sage-bg)" },
+  elevated: { text: "var(--gold)", bg: "var(--gold-bg)" },
+  high: { text: "var(--coral)", bg: "var(--coral-bg)" },
+  critical: { text: "var(--coral)", bg: "var(--coral-bg)" },
 };
 
 const TREND_LABEL = {
@@ -47,13 +56,21 @@ const TREND_LABEL = {
   insufficient_data: "conversation too short to trend",
 };
 
+const cardStyle = {
+  background: "var(--card)",
+  border: "1px solid var(--line)",
+  borderRadius: 24,
+  boxShadow: "0 4px 16px -8px rgba(51,49,45,0.06)",
+};
+
 export default function AnalyzerTab() {
   const [raw, setRaw] = useState("");
+  const [sensitivity, setSensitivity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
-  async function analyze(text) {
+  async function analyze(text, sens = sensitivity) {
     const messages = parseConversation(text);
     if (messages.length === 0) {
       setError("Paste a conversation first — one message per line, like 'Name: message'.");
@@ -65,7 +82,7 @@ export default function AnalyzerTab() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ messages, sensitivity: sens }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -79,51 +96,78 @@ export default function AnalyzerTab() {
     }
   }
 
+  function handleSensitivityChange(newVal) {
+    setSensitivity(newVal);
+    if (result) analyze(raw, newVal);
+  }
+
   return (
     <>
-      <div className="p-6 mb-6" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-        <div
-          className="font-mono text-[11px] uppercase tracking-wider mb-4 pb-2"
-          style={{ color: "var(--muted)", borderBottom: "1px solid var(--line)" }}
-        >
+      <div className="p-8 mb-6" style={cardStyle}>
+        <div className="font-mono text-[10.5px] uppercase tracking-wider mb-4" style={{ color: "var(--muted)" }}>
           Conversation input
         </div>
         <textarea
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
           placeholder={"Jordan: hey! saw your comment...\nYou: oh thanks!"}
-          className="w-full min-h-[160px] bg-white text-sm leading-relaxed p-3.5 resize-y focus:outline-none"
-          style={{ border: "1px solid var(--line)", color: "var(--ink)", fontFamily: "JetBrains Mono, monospace" }}
+          className="w-full min-h-[160px] text-sm leading-relaxed p-4 resize-y focus:outline-none rounded-2xl"
+          style={{ background: "var(--bg)", border: "1px solid var(--line)", color: "var(--ink)" }}
         />
-        <p className="text-xs mt-2.5 mb-3.5 leading-relaxed" style={{ color: "var(--muted)" }}>
+        <p className="text-xs mt-3 mb-4 leading-relaxed" style={{ color: "var(--muted)" }}>
           One message per line, formatted as{" "}
-          <code style={{ background: "var(--line)", color: "var(--ink)", padding: "1px 5px" }}>
+          <code style={{ background: "var(--sage-bg)", color: "var(--ink)", padding: "1px 6px", borderRadius: 5 }}>
             Sender: message
           </code>
           . Nothing is stored — this runs once, on demand.
         </p>
-        <div className="flex gap-3">
+        <div className="flex gap-2.5">
           <button
             disabled={loading}
             onClick={() => analyze(raw)}
-            className="font-semibold text-sm px-5 py-2.5 disabled:opacity-50"
-            style={{ background: "var(--ink)", color: "var(--paper)", border: "1px solid var(--ink)" }}
+            className="font-display font-semibold text-[13.5px] px-6 py-3 disabled:opacity-50"
+            style={{ background: "var(--sage)", color: "#fff", borderRadius: 999, border: "none", boxShadow: "0 8px 20px -8px rgba(122,155,126,0.5)" }}
           >
             {loading ? "Analyzing…" : "Analyze conversation"}
           </button>
           <button
             onClick={() => setRaw(SAMPLE)}
-            className="font-semibold text-sm px-5 py-2.5"
-            style={{ background: "transparent", color: "var(--ink)", border: "1px solid var(--line)" }}
+            className="font-display font-semibold text-[13.5px] px-6 py-3"
+            style={{ background: "transparent", color: "var(--muted)", borderRadius: 999, border: "1px solid var(--line)" }}
           >
             Load sample conversation
           </button>
         </div>
         {error && (
-          <p className="text-sm mt-3" style={{ color: "var(--accent)" }}>
+          <p className="text-sm mt-3" style={{ color: "var(--coral)" }}>
             {error}
           </p>
         )}
+
+        <div className="mt-6 pt-5" style={{ borderTop: "1px solid var(--line)" }}>
+          <div className="flex justify-between items-center mb-2">
+            <span className="font-mono text-[10.5px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+              Sensitivity
+            </span>
+            <span className="font-mono text-[11px] font-semibold" style={{ color: "var(--sage)" }}>
+              {sensitivity < 0.85 ? "Cautious" : sensitivity > 1.15 ? "Sensitive" : "Balanced"}
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={sensitivity}
+            onChange={(e) => handleSensitivityChange(Number(e.target.value))}
+            className="w-full"
+            style={{ accentColor: "var(--sage)" }}
+          />
+          <p className="text-[11.5px] mt-1.5 leading-relaxed" style={{ color: "var(--faint)" }}>
+            Lower flags only strong signals; higher flags earlier, weaker ones too — useful for tuning false
+            positives.
+          </p>
+        </div>
       </div>
 
       {result && <Results result={result} />}
@@ -132,71 +176,60 @@ export default function AnalyzerTab() {
 }
 
 function Results({ result }) {
+  const riskColor = RISK_COLOR[result.overallRisk] || RISK_COLOR.none;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div
-        className="p-6 grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-6 items-center"
-        style={{ background: "var(--paper)", border: "1px solid var(--line)" }}
-      >
+    <div className="flex flex-col gap-5">
+      <div className="p-8 grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-7 items-center" style={cardStyle}>
         <div
-          className="w-[118px] h-[118px] rounded-full flex flex-col items-center justify-center mx-auto sm:mx-0"
-          style={{ border: "3px solid var(--accent)", transform: "rotate(-6deg)" }}
+          className="w-[120px] h-[120px] rounded-full flex flex-col items-center justify-center mx-auto sm:mx-0"
+          style={{ background: riskColor.bg }}
         >
           <span
-            className="font-display font-semibold text-sm uppercase tracking-wide"
-            style={{ color: "var(--accent)" }}
+            className="font-display font-bold text-[14.5px] text-center leading-tight"
+            style={{ color: riskColor.text }}
           >
             {RISK_LABEL[result.overallRisk]}
           </span>
-          <span className="font-mono text-[10.5px] mt-1" style={{ color: "var(--accent)" }}>
+          <span className="font-mono text-[11px] mt-1 opacity-80" style={{ color: riskColor.text }}>
             score {result.totalScore}
           </span>
         </div>
         <div className="text-center sm:text-left">
-          <h2 className="font-display font-semibold text-xl mb-2">Manipulation Journey summary</h2>
+          <h2 className="font-display font-bold text-xl mb-2">Manipulation Journey summary</h2>
           <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-            {result.messageCount} messages examined · {result.flaggedMessages.length} entries flagged for at least
-            one pattern.
+            {result.messageCount} messages examined · {result.flaggedMessages.length} flagged for at least one
+            pattern.
           </p>
           <span
-            className="inline-block font-mono text-xs px-2.5 py-1 mt-2.5"
-            style={{ color: "var(--gold)", background: "var(--gold-bg)", border: "1px solid var(--gold)" }}
+            className="inline-flex items-center gap-1.5 font-mono text-xs px-3 py-1.5 mt-3"
+            style={{ color: "var(--gold)", background: "var(--gold-bg)", borderRadius: 999 }}
           >
             {TREND_LABEL[result.trend]}
           </span>
         </div>
       </div>
 
-      <div className="p-6" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-        <div
-          className="font-mono text-[11px] uppercase tracking-wider mb-4 pb-2"
-          style={{ color: "var(--muted)", borderBottom: "1px solid var(--line)" }}
-        >
+      <div className="p-8" style={cardStyle}>
+        <div className="font-mono text-[10.5px] uppercase tracking-wider mb-4" style={{ color: "var(--muted)" }}>
           Manipulation journey
         </div>
         <RiskTimeline messages={result.messages} />
       </div>
 
       {Object.keys(result.categoryTally).length > 0 && (
-        <div className="p-6" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-          <div
-            className="font-mono text-[11px] uppercase tracking-wider mb-4 pb-2"
-            style={{ color: "var(--muted)", borderBottom: "1px solid var(--line)" }}
-          >
+        <div className="p-8" style={cardStyle}>
+          <div className="font-mono text-[10.5px] uppercase tracking-wider mb-4" style={{ color: "var(--muted)" }}>
             Patterns detected
           </div>
           <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
             {Object.entries(result.categoryTally).map(([key, cat]) => (
               <div
                 key={key}
-                className="p-3.5 relative"
-                style={{ border: "1px solid var(--line)", background: "var(--paper)" }}
+                className="p-4 rounded-2xl"
+                style={{ background: "var(--bg)", border: "1px solid var(--line)" }}
               >
-                <div
-                  className="absolute left-0 top-0 bottom-0"
-                  style={{ width: "3px", background: "var(--accent)" }}
-                />
-                <div className="flex justify-between items-baseline mb-1">
+                <div className="flex justify-between items-baseline mb-1.5">
                   <span className="font-display font-semibold text-sm">{cat.label}</span>
                   <span className="font-mono text-[10.5px]" style={{ color: "var(--faint)" }}>
                     ×{cat.count}
@@ -211,42 +244,33 @@ function Results({ result }) {
         </div>
       )}
 
-      <div className="p-6" style={{ background: "var(--paper)", border: "1px solid var(--line)" }}>
-        <div
-          className="font-mono text-[11px] uppercase tracking-wider mb-4 pb-2"
-          style={{ color: "var(--muted)", borderBottom: "1px solid var(--line)" }}
-        >
+      <div className="p-8" style={cardStyle}>
+        <div className="font-mono text-[10.5px] uppercase tracking-wider mb-4" style={{ color: "var(--muted)" }}>
           Annotated conversation
         </div>
-        <div>
+        <div className="flex flex-col gap-1">
           {result.messages.map((m) => {
             const flagged = m.flags.length > 0;
             return (
-              <div
-                key={m.index}
-                className="grid grid-cols-[90px_1fr] gap-4 py-3"
-                style={{
-                  borderBottom: "1px solid var(--line)",
-                  background: flagged ? "var(--accent-bg)" : "transparent",
-                  margin: flagged ? "0 -16px" : undefined,
-                  padding: flagged ? "13px 16px" : "13px 0",
-                }}
-              >
+              <div key={m.index} className="flex gap-3 py-3.5" style={{ borderTop: "1px solid var(--line)" }}>
                 <div
-                  className="font-mono text-[11px] uppercase pt-0.5"
-                  style={{ color: flagged ? "var(--accent)" : "var(--muted)" }}
+                  className="w-[30px] h-[30px] rounded-full flex-shrink-0 flex items-center justify-center font-display font-bold text-[11px]"
+                  style={{ background: flagged ? "var(--coral-bg)" : "var(--sage-bg)", color: flagged ? "var(--coral)" : "var(--sage)" }}
                 >
-                  {m.sender}
+                  {m.sender?.[0]?.toUpperCase() || "?"}
                 </div>
-                <div>
-                  <p className="text-sm leading-relaxed">{m.text}</p>
+                <div
+                  className="flex-1 p-3.5 rounded-2xl"
+                  style={{ background: flagged ? "var(--coral-bg)" : "var(--bg)", border: flagged ? "none" : "1px solid var(--line)" }}
+                >
+                  <p className="text-sm leading-relaxed m-0">{m.text}</p>
                   {flagged && (
-                    <div className="mt-1.5">
+                    <div className="mt-2">
                       {m.flags.map((f, i) => (
                         <span
                           key={i}
-                          className="font-mono text-[10px] px-1.5 py-0.5 mr-1.5"
-                          style={{ color: "var(--accent)", border: "1px solid var(--accent)" }}
+                          className="font-mono text-[10px] px-2.5 py-1 mr-1.5"
+                          style={{ color: "var(--coral)", background: "#fff", border: "1px solid var(--coral)", borderRadius: 999 }}
                         >
                           {f.label}
                         </span>
@@ -260,25 +284,22 @@ function Results({ result }) {
         </div>
       </div>
 
-      <div className="p-6" style={{ background: "var(--paper)", border: "1px solid var(--gold)" }}>
-        <div
-          className="font-mono text-[11px] uppercase tracking-wider mb-4 pb-2"
-          style={{ color: "var(--muted)", borderBottom: "1px solid var(--line)" }}
-        >
+      <div className="p-8" style={{ ...cardStyle, border: "1px solid var(--gold)" }}>
+        <div className="font-mono text-[10.5px] uppercase tracking-wider mb-4" style={{ color: "var(--muted)" }}>
           Safety guidance
         </div>
-        <ul className="flex flex-col gap-2.5">
+        <ul className="flex flex-col gap-3">
           {result.guidance.map((tip, i) => (
-            <li key={i} className="flex gap-2.5 text-sm leading-relaxed">
-              <span style={{ color: "var(--gold)", fontWeight: 700 }}>§</span>
+            <li key={i} className="flex gap-3 text-sm leading-relaxed">
+              <span
+                className="flex-shrink-0 mt-1.5"
+                style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold)" }}
+              />
               {tip}
             </li>
           ))}
         </ul>
-        <p
-          className="text-xs leading-relaxed mt-4 pt-3.5"
-          style={{ color: "var(--muted)", borderTop: "1px solid var(--line)" }}
-        >
+        <p className="text-xs leading-relaxed mt-4 pt-4" style={{ color: "var(--muted)", borderTop: "1px solid var(--line)" }}>
           If a conversation reaches this point, it's okay to stop responding, block the person, and tell a trusted
           adult. In India, teens can also contact Childline at 1098 for free, confidential support.
         </p>

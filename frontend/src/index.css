@@ -1,35 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #F6F3EC;
-  --paper: #FBF9F4;
-  --ink: #1A1815;
-  --muted: #7A7468;
-  --faint: #A79F8E;
-  --line: #D8D2C2;
-  --accent: #C4491F;
-  --accent-bg: #F1DCCF;
-  --gold: #8C6A2A;
-  --gold-bg: #EFE4CC;
+  --bg: #FBF8F3;
+  --card: #FFFFFF;
+  --ink: #33312D;
+  --muted: #8A8579;
+  --faint: #B7B2A4;
+  --line: #EDE7D9;
+  --sage: #7A9B7E;
+  --sage-bg: #E4EDE3;
+  --coral: #E4897A;
+  --coral-bg: #FBEAE5;
+  --gold: #D9A455;
+  --gold-bg: #F6E9D3;
 }
 
 body {
   background-color: var(--bg);
-  background-image: radial-gradient(circle at 50% 0%, rgba(196, 73, 31, 0.03), transparent 40%);
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .font-display {
-  font-family: "Fraunces", serif;
+  font-family: "Sora", sans-serif;
 }
 .font-mono {
-  font-family: "JetBrains Mono", monospace;
+  font-family: "IBM Plex Mono", monospace;
 }
