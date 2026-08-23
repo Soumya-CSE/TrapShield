@@ -1,5 +1,8 @@
 import { useState } from "react";
 import RiskTimeline from "./RiskTimeline.jsx";
+import FeatureDock from "./FeatureDock.jsx";
+import FeatureDrawer from "./FeatureDrawer.jsx";
+import { generateReport } from "../lib/reportGenerator.js";
 
 const SAMPLE = `Jordan: hey! i saw your comment on that art page, you're really talented
 You: oh thank you!
@@ -32,6 +35,38 @@ function parseConversation(raw) {
     .filter((m) => m.text.length > 0);
 }
 
+function relativeTime(ts) {
+  const diffMin = Math.round((Date.now() - ts) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.round(diffHr / 24)}d ago`;
+}
+
+const HISTORY_KEY = "trapshield-history";
+const MAX_HISTORY = 12;
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    // drop any entries saved before "result" was stored on the entry itself
+    // (older versions of this app only stored a risk summary, not the full result)
+    return Array.isArray(parsed) ? parsed.filter((e) => e && e.result && e.result.overallRisk) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(entries) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
+  } catch {
+    // storage full or unavailable — fail silently, history just won't persist
+  }
+}
+
 const RISK_LABEL = {
   none: "No signal",
   low: "Low risk",
@@ -40,7 +75,6 @@ const RISK_LABEL = {
   critical: "Critical risk",
 };
 
-// which accent color family a risk level maps to
 const RISK_COLOR = {
   none: { text: "var(--muted)", bg: "var(--line)" },
   low: { text: "var(--sage)", bg: "var(--sage-bg)" },
@@ -69,8 +103,10 @@ export default function AnalyzerTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [history, setHistory] = useState(() => loadHistory());
+  const [activeDock, setActiveDock] = useState(null); // null | "history" | "sensitivity"
 
-  async function analyze(text, sens = sensitivity) {
+  async function analyze(text, sens = sensitivity, { record = true } = {}) {
     const messages = parseConversation(text);
     if (messages.length === 0) {
       setError("Paste a conversation first — one message per line, like 'Name: message'.");
@@ -88,7 +124,24 @@ export default function AnalyzerTab() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Request failed (${res.status})`);
       }
-      setResult(await res.json());
+      const data = await res.json();
+      setResult(data);
+
+      if (record) {
+        const entry = {
+          id: `${Date.now()}`,
+          savedAt: Date.now(),
+          raw: text,
+          sensitivity: sens,
+          preview: messages[0]?.text?.slice(0, 60) || "Untitled conversation",
+          result: data,
+        };
+        setHistory((prev) => {
+          const next = [entry, ...prev].slice(0, MAX_HISTORY);
+          saveHistory(next);
+          return next;
+        });
+      }
     } catch (e) {
       setError(e.message || "Something went wrong reaching the analysis engine.");
     } finally {
@@ -98,8 +151,31 @@ export default function AnalyzerTab() {
 
   function handleSensitivityChange(newVal) {
     setSensitivity(newVal);
-    if (result) analyze(raw, newVal);
+    if (result) analyze(raw, newVal, { record: false });
   }
+
+  function openHistoryEntry(entry) {
+    setRaw(entry.raw);
+    setSensitivity(entry.sensitivity);
+    setResult(entry.result);
+  }
+
+  function deleteHistoryEntry(id) {
+    setHistory((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      saveHistory(next);
+      return next;
+    });
+  }
+
+  function downloadHistoryEntry(entry) {
+    generateReport(entry);
+  }
+
+  const dockItems = [
+    { id: "history", icon: "🕘", label: "History", badge: history.length > 0 },
+    { id: "sensitivity", icon: "🎚️", label: "Sensitivity", divider: true },
+  ];
 
   return (
     <>
@@ -119,7 +195,7 @@ export default function AnalyzerTab() {
           <code style={{ background: "var(--sage-bg)", color: "var(--ink)", padding: "1px 6px", borderRadius: 5 }}>
             Sender: message
           </code>
-          . Nothing is stored — this runs once, on demand.
+          . Nothing is stored on a server — history is saved to this browser only.
         </p>
         <div className="flex gap-2.5">
           <button
@@ -143,11 +219,78 @@ export default function AnalyzerTab() {
             {error}
           </p>
         )}
+      </div>
+      
+      {result ? <Results result={result} /> : <EmptyState />}
 
-        <div className="mt-6 pt-5" style={{ borderTop: "1px solid var(--line)" }}>
+      <FeatureDock items={dockItems} activeId={activeDock} onSelect={setActiveDock} />
+
+      {activeDock === "history" && (
+        <FeatureDrawer
+          title="History"
+          subtitle="Your last 12 analyzed conversations, saved on this device."
+          onClose={() => setActiveDock(null)}
+        >
+          {history.length === 0 && (
+            <p className="text-xs" style={{ color: "var(--faint)" }}>
+              Nothing analyzed yet — run an analysis to see it show up here.
+            </p>
+          )}
+          <div className="flex flex-col gap-2.5">
+            {history.map((entry) => {
+              const c = RISK_COLOR[entry.result.overallRisk] || RISK_COLOR.none;
+              return (
+                <div key={entry.id} className="p-3.5 rounded-2xl" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span
+                      className="font-mono text-[9px] px-2 py-0.5 rounded-full font-semibold"
+                      style={{ color: c.text, background: c.bg }}
+                    >
+                      {entry.result.overallRisk}
+                    </span>
+                    <span className="font-mono text-[9.5px]" style={{ color: "var(--faint)" }}>
+                      {relativeTime(entry.savedAt)}
+                    </span>
+                  </div>
+                  <p className="text-xs leading-snug mb-2.5" style={{ color: "var(--ink)" }}>
+                    {entry.preview}…
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => openHistoryEntry(entry)}
+                      className="flex-1 text-[10.5px] font-semibold py-1.5 rounded-full"
+                      style={{ background: "var(--sage-bg)", color: "var(--sage)", border: "none", cursor: "pointer" }}
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => downloadHistoryEntry(entry)}
+                      className="flex-1 text-[10.5px] font-semibold py-1.5 rounded-full"
+                      style={{ background: "var(--card)", color: "var(--muted)", border: "1px solid var(--line)", cursor: "pointer" }}
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={() => deleteHistoryEntry(entry.id)}
+                      title="Delete this entry"
+                      className="text-[10.5px] font-semibold py-1.5 px-2.5 rounded-full"
+                      style={{ background: "var(--card)", color: "var(--coral)", border: "1px solid var(--line)", cursor: "pointer" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </FeatureDrawer>
+      )}
+
+      {activeDock === "sensitivity" && (
+        <FeatureDrawer title="Sensitivity" onClose={() => setActiveDock(null)}>
           <div className="flex justify-between items-center mb-2">
             <span className="font-mono text-[10.5px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>
-              Sensitivity
+              Level
             </span>
             <span className="font-mono text-[11px] font-semibold" style={{ color: "var(--sage)" }}>
               {sensitivity < 0.85 ? "Cautious" : sensitivity > 1.15 ? "Sensitive" : "Balanced"}
@@ -163,15 +306,52 @@ export default function AnalyzerTab() {
             className="w-full"
             style={{ accentColor: "var(--sage)" }}
           />
-          <p className="text-[11.5px] mt-1.5 leading-relaxed" style={{ color: "var(--faint)" }}>
+          <p className="text-[11.5px] mt-2 leading-relaxed" style={{ color: "var(--faint)" }}>
             Lower flags only strong signals; higher flags earlier, weaker ones too — useful for tuning false
-            positives.
+            positives. Adjusting this re-scores the conversation currently on screen.
           </p>
-        </div>
-      </div>
-
-      {result && <Results result={result} />}
+        </FeatureDrawer>
+      )}
     </>
+  );
+}
+
+const PATTERN_PREVIEW = [
+  { icon: "🚪", label: "Isolation", desc: "Cutting a teen off from parents or friends who could help." },
+  { icon: "🤐", label: "Secrecy", desc: "Asking to delete messages or hide the conversation." },
+  { icon: "💫", label: "Love-bombing", desc: "Intense, fast affection used to build trust quickly." },
+  { icon: "📲", label: "Off-platform push", desc: "Moving the chat somewhere less monitored." },
+  { icon: "📷", label: "Photo requests", desc: "Asking for private or explicit images." },
+  { icon: "💰", label: "Financial asks", desc: "Requests for money or gift cards." },
+  { icon: "⚠️", label: "Threats / coercion", desc: "Blackmail or threats to share private content." },
+  { icon: "⏱️", label: "Urgency pressure", desc: "Guilt or time pressure to stop careful thinking." },
+  { icon: "📍", label: "Meet-up pressure", desc: "Pushing toward an in-person, unsupervised meeting." },
+];
+
+function EmptyState() {
+  return (
+    <div className="p-8" style={cardStyle}>
+      <div className="font-mono text-[10.5px] uppercase tracking-wider mb-2" style={{ color: "var(--muted)" }}>
+        What this looks for
+      </div>
+      <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+        Paste a conversation above and TrapShield scores it against nine explainable manipulation patterns —
+        nothing is a black box, every flag traces back to the exact phrase that triggered it.
+      </p>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+        {PATTERN_PREVIEW.map((p) => (
+          <div key={p.label} className="p-4 rounded-2xl" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <span style={{ fontSize: 16 }}>{p.icon}</span>
+              <span className="font-display font-semibold text-[13px]">{p.label}</span>
+            </div>
+            <p className="text-xs leading-relaxed m-0" style={{ color: "var(--muted)" }}>
+              {p.desc}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -185,10 +365,7 @@ function Results({ result }) {
           className="w-[120px] h-[120px] rounded-full flex flex-col items-center justify-center mx-auto sm:mx-0"
           style={{ background: riskColor.bg }}
         >
-          <span
-            className="font-display font-bold text-[14.5px] text-center leading-tight"
-            style={{ color: riskColor.text }}
-          >
+          <span className="font-display font-bold text-[14.5px] text-center leading-tight" style={{ color: riskColor.text }}>
             {RISK_LABEL[result.overallRisk]}
           </span>
           <span className="font-mono text-[11px] mt-1 opacity-80" style={{ color: riskColor.text }}>
@@ -224,11 +401,7 @@ function Results({ result }) {
           </div>
           <div className="grid gap-3.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
             {Object.entries(result.categoryTally).map(([key, cat]) => (
-              <div
-                key={key}
-                className="p-4 rounded-2xl"
-                style={{ background: "var(--bg)", border: "1px solid var(--line)" }}
-              >
+              <div key={key} className="p-4 rounded-2xl" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
                 <div className="flex justify-between items-baseline mb-1.5">
                   <span className="font-display font-semibold text-sm">{cat.label}</span>
                   <span className="font-mono text-[10.5px]" style={{ color: "var(--faint)" }}>
@@ -291,10 +464,7 @@ function Results({ result }) {
         <ul className="flex flex-col gap-3">
           {result.guidance.map((tip, i) => (
             <li key={i} className="flex gap-3 text-sm leading-relaxed">
-              <span
-                className="flex-shrink-0 mt-1.5"
-                style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold)" }}
-              />
+              <span className="flex-shrink-0 mt-1.5" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--gold)" }} />
               {tip}
             </li>
           ))}
