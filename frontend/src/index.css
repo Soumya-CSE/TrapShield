@@ -1,2 +1,27 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #FBF8F3;
+  --card: #FFFFFF;
+  --ink: #33312D;
+  --muted: #8A8579;
+  --faint: #B7B2A4;
+  --line: #EDE7D9;
+  --sage: #7A9B7E;
+  --sage-bg: #E4EDE3;
+  --coral: #E4897A;
+  --coral-bg: #FBEAE5;
+  --gold: #D9A455;
+  --gold-bg: #F6E9D3;
+}
+
+body {
+  background-color: var(--bg);
+}
+
+.font-display {
+  font-family: "Sora", sans-serif;
+}
+.font-mono {
+  font-family: "IBM Plex Mono", monospace;
+}

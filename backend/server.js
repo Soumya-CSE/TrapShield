@@ -1,12 +1,16 @@
 import express from "express";
 import cors from "cors";
+import "dotenv/config";
+import {GoogleGenAI} from "@google/genai";
 import { analyzeConversation } from "./detectionEngine.js";
+import { SYSTEM_PROMPT } from "./chatPrompt.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ---- Safety guidance, keyed by which categories fired ---------------------
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 const GUIDANCE = {
   isolation:
     "Someone asking you to keep them secret from your parents or friends is a warning sign on its own — healthy relationships don't need to be hidden.",
@@ -29,7 +33,7 @@ const GUIDANCE = {
 };
 
 function buildGuidance(result) {
-  const cats = Object.keys(result.categoryTally);
+  const cats = Object.keys(result.categoryTally || {});
   const tips = cats.map((c) => GUIDANCE[c]).filter(Boolean);
   if (tips.length === 0) {
     return [
@@ -42,25 +46,46 @@ function buildGuidance(result) {
 app.post("/api/analyze", (req, res) => {
   const { messages } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: "Provide a non-empty 'messages' array of { sender, text }." });
+    return res.status(400).json({ error: "Send a non-empty messages array" });
   }
-  const cleaned = messages
-    .filter((m) => m && typeof m.text === "string" && m.text.trim().length > 0)
-    .map((m) => ({ sender: String(m.sender || "unknown"), text: m.text.trim() }));
-
-  if (cleaned.length === 0) {
-    return res.status(400).json({ error: "No valid messages after cleaning." });
-  }
-
-  const result = analyzeConversation(cleaned);
+  const result = analyzeConversation(messages);
   const guidance = buildGuidance(result);
-
   res.json({ ...result, guidance });
+});
+
+// ---- new chat route ---------------------------------------------------
+app.post("/api/chat", async (req, res) => {
+  const { messages } = req.body || {};
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: "Send a non-empty messages array" });
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({ error: "Server is missing GEMINI_API_KEY — check backend/.env" });
+  }
+
+  try {
+    // Gemini uses "model"/"user" roles instead of "assistant"/"user"
+    const contents = messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+
+    const response = await genAI.models.generateContent({
+      model: "gemini-3.6-flash",
+      contents,
+      config: { systemInstruction: SYSTEM_PROMPT },
+    });
+
+    res.json({ reply: response.text });
+  } catch (err) {
+    console.error("Chat error:", err.message);
+    res.status(500).json({ error: "Something went wrong reaching the Guide." });
+  }
 });
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`TrapShield backend running on http://localhost:${PORT}`);
+  console.log(`Backend running on http://localhost:${PORT}`);
 });
