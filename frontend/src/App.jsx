@@ -7,22 +7,22 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ color: "var(--ink)" }}>
-      <div className="max-w-3xl mx-auto px-8 py-14">
+      <div className="max-w-5xl mx-auto px-10 py-16">
         <header className="flex justify-between items-center mb-9">
           <div className="flex items-center gap-3">
             <div
-              className="w-9 h-9 rounded-xl flex-shrink-0"
+              className="w-12 h-12 rounded-xl flex-shrink-0"
               style={{ background: "linear-gradient(135deg, var(--sage), var(--gold))" }}
             />
-            <span className="font-display font-bold text-xl">TrapShield</span>
+            <span className="font-display font-bold text-3xl">TrapShield</span>
           </div>
-          <p className="text-sm max-w-xs text-right leading-relaxed hidden sm:block" style={{ color: "var(--muted)" }}>
+          <p className="text-sm max-w-sm text-right leading-relaxed hidden sm:block" style={{ color: "var(--muted)" }}>
             Don't wait until it's too late — read the shape of a conversation, not just one message.
           </p>
         </header>
 
         <div
-          className="inline-flex gap-1 p-1.5 mb-8"
+          className="inline-flex gap-1 p-1.5 mb-10"
           style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 999, boxShadow: "0 1px 2px rgba(51,49,45,0.03)" }}
         >
           <TabButton label="Analyze a conversation" active={tab === "analyze"} onClick={() => setTab("analyze")} />
